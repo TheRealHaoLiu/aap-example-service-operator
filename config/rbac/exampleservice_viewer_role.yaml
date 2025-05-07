@@ -1,0 +1,23 @@
+# permissions for end users to view exampleservices.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: aap-example-service-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: exampleservice-viewer-role
+rules:
+- apiGroups:
+  - exampleservice.ansible.com
+  resources:
+  - exampleservices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - exampleservice.ansible.com
+  resources:
+  - exampleservices/status
+  verbs:
+  - get
