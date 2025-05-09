@@ -1,0 +1,48 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ ansible_operator_meta.name }}"
+  namespace: "{{ ansible_operator_meta.namespace }}"
+  labels:
+    app: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/name: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/managed-by: "{{ ansible_operator_meta.name }}"
+{% if aap_integration_enabled | bool %}
+    app.kubernetes.io/part-of: "{{ aap_ref.name }}"
+{% endif %}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "{{ ansible_operator_meta.name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ ansible_operator_meta.name }}"
+    spec:
+      containers:
+      - name: flask-app
+        image: "{{ flask_app_image }}"
+        ports:
+        - containerPort: {{ flask_app_port }}
+{% if aap_integration_enabled | bool and service_secret_name %}
+        volumeMounts:
+        - name: service-secret
+          mountPath: "/etc/service-secret"
+          readOnly: true
+        env:
+        - name: SERVICE_SECRET_PATH
+          value: "/etc/service-secret/resource_server_secret"
+{% else %}
+        volumeMounts: []
+        env: []
+{% endif %}
+{% if aap_integration_enabled | bool and service_secret_name %}
+      volumes:
+      - name: service-secret
+        secret:
+          secretName: "{{ service_secret_name }}"
+{% else %}
+      volumes: []
+{% endif %}

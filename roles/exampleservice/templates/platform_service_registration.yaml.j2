@@ -1,0 +1,61 @@
+---
+apiVersion: aap.ansible.com/v1alpha1
+kind: PlatformServiceRegistration
+metadata:
+  name: "{{ ansible_operator_meta.name }}"
+  namespace: "{{ ansible_operator_meta.namespace }}"
+  labels:
+    app.kubernetes.io/name: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/managed-by: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/part-of: "{{ aap_ref.name }}"
+spec:
+  aap_ref:
+    name: "{{ aap_ref.name }}"
+    namespace: "{{ aap_ref.namespace | default(ansible_operator_meta.namespace) }}"
+
+  # Service Type configuration
+  service_type:
+    name: "{{ service_type_name }}"
+    ping_url: "{{ ping_url }}"
+    service_index_path: "{{ service_index_path }}"
+
+  # Service Cluster configuration
+  service_cluster:
+    name: "{{ service_cluster_name }}"
+    service_type: "{{ service_type_name }}"
+
+  # Service Node configuration
+  service_node:
+    name: "{{ ansible_operator_meta.name }}.{{ ansible_operator_meta.namespace }}.svc.cluster.local"
+    address: "{{ ansible_operator_meta.name }}.{{ ansible_operator_meta.namespace }}.svc.cluster.local"
+    service_cluster: "{{ service_cluster_name }}"
+    tags: "{{ ansible_operator_meta.name }}-tag"
+
+  # Service configuration
+  service:
+    name: "{{ service_name }}"
+    description: "{{ service_description }}"
+    api_slug: "{{ service_api_slug }}"
+    http_port: port-8000
+    service_cluster: "{{ service_cluster_name }}"
+    is_service_https: false
+    enable_gateway_auth: true
+    service_path: "{{ service_path }}"
+    service_port: {{ service_port }}
+    node_tags: "{{ ansible_operator_meta.name }}-tag"
+    order: 50
+
+  # Additional routes configuration
+  {% for route in additional_routes %}
+  route:
+    name: "{{ route.name }}"
+    description: "{{ route.description }}"
+    gateway_path: "{{ route.gateway_path }}"
+    http_port: "{{ route.http_port | default('port-8000') }}"
+    service_cluster: "{{ route.service_cluster }}"
+    is_service_https: "{{ route.is_service_https | default(false) }}"
+    enable_gateway_auth: "{{ route.enable_gateway_auth | default(true) }}"
+    service_path: "{{ route.service_path }}"
+    service_port: "{{ route.service_port }}"
+    node_tags: "{{ route.node_tags | default('') }}"
+  {% endfor %}

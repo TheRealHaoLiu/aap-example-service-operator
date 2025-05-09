@@ -1,2 +1,24 @@
 ---
 # defaults file for ExampleService
+
+# Flask app image
+flask_app_image: "quay.io/haoliu/dumb-flask-app:latest"
+flask_app_port: 5000
+
+# Service configuration
+service_port: 80
+service_type: ClusterIP
+
+# PlatformServiceRegistration configuration
+service_path: "/api/example/"
+ping_url: "/api/v1/health/"
+service_index_path: "/v1/service-index/"
+service_type_name: example-service-type
+service_cluster_name: example-service-cluster
+service_name: "Example service"
+service_description: "Example service for AAP integration"
+service_api_slug: "example"
+is_service_https: false
+enable_gateway_auth: true
+
+additional_routes: []

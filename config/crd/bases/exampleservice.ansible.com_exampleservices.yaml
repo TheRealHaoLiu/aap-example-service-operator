@@ -32,11 +32,52 @@ spec:
           spec:
             description: Spec defines the desired state of ExampleService
             type: object
-            x-kubernetes-preserve-unknown-fields: true
+            properties:
+              aap_ref:
+                description: Reference to the AnsibleAutomationPlatform instance
+                type: object
+                required:
+                  - name
+                properties:
+                  name:
+                    description: Name of the AnsibleAutomationPlatform instance
+                    type: string
+                  namespace:
+                    description: Namespace of the AnsibleAutomationPlatform instance (optional, defaults to the same namespace as the ExampleService)
+                    type: string
+            # aap_ref is optional
           status:
             description: Status defines the observed state of ExampleService
             type: object
-            x-kubernetes-preserve-unknown-fields: true
+            properties:
+              phase:
+                description: Current phase of the service
+                type: string
+              platformServiceRegistration:
+                description: Name of the PlatformServiceRegistration CR
+                type: string
+              serviceSecretName:
+                description: Name of the secret containing the service secret
+                type: string
+              conditions:
+                description: The resulting conditions when a Service is instantiated
+                items:
+                  properties:
+                    status:
+                      type: string
+                    type:
+                      type: string
+                    reason:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                    message:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
         type: object
     served: true
     storage: true

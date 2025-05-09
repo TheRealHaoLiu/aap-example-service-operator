@@ -1,0 +1,22 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: "{{ ansible_operator_meta.name }}"
+  namespace: "{{ ansible_operator_meta.namespace }}"
+  labels:
+    app: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/name: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/managed-by: "{{ ansible_operator_meta.name }}"
+{% if aap_integration_enabled | bool %}
+    app.kubernetes.io/part-of: "{{ aap_ref.name }}"
+{% endif %}
+spec:
+  to:
+    kind: Service
+    name: "{{ ansible_operator_meta.name }}"
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

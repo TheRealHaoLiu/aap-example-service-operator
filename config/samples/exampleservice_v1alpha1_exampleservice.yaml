@@ -6,4 +6,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: exampleservice-sample
 spec:
-  # TODO(user): Add fields here
+  # Reference to the AnsibleAutomationPlatform instance (optional)
+  # If not provided, the service will be deployed without AAP Gateway integration
+  aap_ref:
+    name: aap
+    # namespace: default  # Optional, defaults to the same namespace as the ExampleService
+
+  # To deploy without AAP Gateway integration, comment out or remove the aap_ref field:
+  # spec:
+  #   # No aap_ref field means no AAP Gateway integration

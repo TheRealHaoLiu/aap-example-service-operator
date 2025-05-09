@@ -1,0 +1,22 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ ansible_operator_meta.name }}"
+  namespace: "{{ ansible_operator_meta.namespace }}"
+  labels:
+    app: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/name: "{{ ansible_operator_meta.name }}"
+    app.kubernetes.io/managed-by: "{{ ansible_operator_meta.name }}"
+{% if aap_integration_enabled | bool %}
+    app.kubernetes.io/part-of: "{{ aap_ref.name }}"
+{% endif %}
+spec:
+  selector:
+    app: "{{ ansible_operator_meta.name }}"
+  ports:
+  - name: http
+    protocol: TCP
+    port: {{ service_port }}
+    targetPort: {{ flask_app_port }}
+  type: {{ service_type }}
