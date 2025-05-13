@@ -22,27 +22,23 @@ spec:
         app: "{{ ansible_operator_meta.name }}"
     spec:
       containers:
-      - name: flask-app
-        image: "{{ flask_app_image }}"
+      - name: example-app
+        image: "{{ container_image }}"
         ports:
-        - containerPort: {{ flask_app_port }}
-{% if aap_integration_enabled | bool and service_secret_name %}
-        volumeMounts:
-        - name: service-secret
-          mountPath: "/etc/service-secret"
-          readOnly: true
+        - containerPort: {{ container_port | int }}
         env:
-        - name: SERVICE_SECRET_PATH
-          value: "/etc/service-secret/resource_server_secret"
-{% else %}
-        volumeMounts: []
-        env: []
+{% if aap_integration_enabled | bool and service_secret_name and env_vars | length > 0 %}
+{% for env_var in env_vars %}
+        - name: {{ env_var.name }}
+          value: "{{ env_var.value }}"
+{% endfor %}
 {% endif %}
-{% if aap_integration_enabled | bool and service_secret_name %}
-      volumes:
-      - name: service-secret
-        secret:
-          secretName: "{{ service_secret_name }}"
-{% else %}
-      volumes: []
+{% if aap_integration_enabled | bool and service_secret_name and secret_env_vars | length > 0 %}
+{% for secret_env_var in secret_env_vars %}
+        - name: {{ secret_env_var.name }}
+          valueFrom:
+            secretKeyRef:
+              name: "{{ service_secret_name }}"
+              key: {{ secret_env_var.key }}
+{% endfor %}
 {% endif %}

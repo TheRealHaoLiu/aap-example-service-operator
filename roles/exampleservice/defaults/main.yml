@@ -2,8 +2,8 @@
 # defaults file for ExampleService
 
 # Flask app image
-flask_app_image: "quay.io/haoliu/dumb-flask-app:latest"
-flask_app_port: 5000
+container_image: "quay.io/haoliu/dumb-flask-app:latest"
+container_port: 5000
 
 # Service configuration
 service_port: 80

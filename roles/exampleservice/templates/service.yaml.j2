@@ -18,5 +18,5 @@ spec:
   - name: http
     protocol: TCP
     port: {{ service_port }}
-    targetPort: {{ flask_app_port }}
+    targetPort: {{ container_port }}
   type: {{ service_type }}

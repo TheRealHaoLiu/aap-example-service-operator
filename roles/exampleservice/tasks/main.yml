@@ -13,10 +13,11 @@
       - "aap_ref: {{ aap_ref | default('undefined') }}"
       - "aap_integration_enabled: {{ aap_integration_enabled }}"
 
-# Set default service_secret_name to empty if not using AAP integration
-- name: Set default service_secret_name
+# Set default service_secret_name and env_vars to empty if not using AAP integration
+- name: Set default service_secret_name and env_vars
   ansible.builtin.set_fact:
     service_secret_name: ""
+    env_vars: []
 
 # Debug service names and paths
 - name: Debug service names and paths
@@ -65,52 +66,137 @@
       ansible.builtin.debug:
         msg: "PlatformServiceRegistration result: {{ psr_result }}"
 
-    # # Wait for PlatformServiceRegistration to be completed
-    # - name: Wait for PlatformServiceRegistration to be completed
-    #   kubernetes.core.k8s_info:
-    #     api_version: aap.ansible.com/v1alpha1
-    #     kind: PlatformServiceRegistration
-    #     name: "{{ ansible_operator_meta.name }}"
-    #     namespace: "{{ ansible_operator_meta.namespace }}"
-    #   register: psr_status
-    #   until:
-    #     - psr_status.resources[0].status is defined
-    #     - psr_status.resources[0].status.phase is defined
-    #     - psr_status.resources[0].status.phase == "Registered"
-    #     - psr_status.resources[0].status.serviceSecretName is defined
-    #   retries: 30
-    #   delay: 10
+    # Check PlatformServiceRegistration status
+    - name: Check PlatformServiceRegistration status
+      kubernetes.core.k8s_info:
+        api_version: aap.ansible.com/v1alpha1
+        kind: PlatformServiceRegistration
+        name: "{{ ansible_operator_meta.name }}"
+        namespace: "{{ ansible_operator_meta.namespace }}"
+      register: psr_status
 
-    # Set service secret name
-    - name: Set service secret name
+    # Wait for PlatformServiceRegistration to be completed
+    - name: Wait for PlatformServiceRegistration to be completed
+      kubernetes.core.k8s_info:
+        api_version: aap.ansible.com/v1alpha1
+        kind: PlatformServiceRegistration
+        name: "{{ ansible_operator_meta.name }}"
+        namespace: "{{ ansible_operator_meta.namespace }}"
+      register: psr_status
+      until:
+        - psr_status.resources[0].status is defined
+        - psr_status.resources[0].status.phase is defined
+        - psr_status.resources[0].status.phase == "Registered"
+        - psr_status.resources[0].status.serviceSecretName is defined
+      retries: 6
+      delay: 5
+      ignore_errors: true
+
+    # Check if PlatformServiceRegistration is registered
+    - name: Check if PlatformServiceRegistration is registered
       ansible.builtin.set_fact:
-        service_secret_name: "{{ ansible_operator_meta.name }}-service-secret"
+        psr_registered: "{{ psr_status.resources[0].status is defined and
+                            psr_status.resources[0].status.phase is defined and
+                            psr_status.resources[0].status.phase == 'Registered' and
+                            psr_status.resources[0].status.serviceSecretName is defined }}"
 
-# Create Deployment
-- name: Create Deployment
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('template', 'deployment.yaml.j2') | from_yaml }}"
+    # Update ExampleService status if PSR registration failed
+    - name: Update ExampleService status if PSR registration failed
+      operator_sdk.util.k8s_status:
+        api_version: exampleservice.ansible.com/v1alpha1
+        kind: ExampleService
+        name: "{{ ansible_operator_meta.name }}"
+        namespace: "{{ ansible_operator_meta.namespace }}"
+        status:
+          phase: "RegistrationPending"
+          platformServiceRegistration: "{{ ansible_operator_meta.name }}"
+          conditions:
+            - type: "Deployed"
+              status: "False"
+              reason: "RegistrationPending"
+              message: "Waiting for PlatformServiceRegistration to complete"
+      when: not psr_registered | bool
 
-# Create Service
-- name: Create Service
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('template', 'service.yaml.j2') | from_yaml }}"
+    # Fail reconciliation if PSR registration failed to trigger requeue
+    - name: Fail reconciliation if PSR registration failed to trigger requeue
+      ansible.builtin.fail:
+        msg: "PlatformServiceRegistration is not yet registered. Will retry later."
+      when: not psr_registered | bool
 
-# Create Route (if on OpenShift)
-- name: Check if running on OpenShift
-  kubernetes.core.k8s_info:
-    api_version: route.openshift.io/v1
-    kind: Route
-  register: route_api
-  ignore_errors: true
+    # Set service secret name from PlatformServiceRegistration status
+    - name: Set service secret name from PlatformServiceRegistration status
+      ansible.builtin.set_fact:
+        service_secret_name: "{{ psr_status.resources[0].status.serviceSecretName }}"
+      when: psr_registered | bool
 
-- name: Create Route (if on OpenShift)
-  kubernetes.core.k8s:
-    state: present
-    definition: "{{ lookup('template', 'route.yaml.j2') | from_yaml }}"
-  when: route_api is succeeded
+    # Get service secret if registered
+    - name: Get service secret if registered
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        name: "{{ service_secret_name }}"
+        namespace: "{{ ansible_operator_meta.namespace }}"
+      register: service_secret_info
+      when: psr_registered | bool and service_secret_name != ""
+
+    # Initialize environment variables list
+    - name: Initialize environment variables list
+      ansible.builtin.set_fact:
+        env_vars: "{{ [] }}"
+        secret_env_vars: "{{ [] }}"
+      when: psr_registered | bool
+
+    # Set environment variables from PlatformServiceRegistration status if defined
+    - name: Set environment variables from PlatformServiceRegistration status if defined
+      ansible.builtin.set_fact:
+        env_vars: "{{ env_vars + [{'name': item.key, 'value': item.value | string}] }}"
+      loop: "{{ psr_status.resources[0].status.settingEnvVars | default({}) | dict2items }}"
+      when: psr_registered | bool and psr_status.resources[0].status.settingEnvVars is defined
+
+    # Set environment variables from service secret if defined
+    - name: Set environment variables from service secret if defined
+      ansible.builtin.set_fact:
+        secret_env_vars: "{{ secret_env_vars + [{'name': item, 'key': item}] }}"
+      loop: "{{ service_secret_info.resources[0].data | default({}) | dict2items | map(attribute='key') | list }}"
+      when: psr_registered | bool and service_secret_info.resources is defined and service_secret_info.resources | length > 0
+
+    # Debug env_vars and secret_env_vars
+    - name: Debug env_vars and secret_env_vars
+      ansible.builtin.debug:
+        msg:
+          - "env_vars: {{ env_vars }}"
+          - "secret_env_vars: {{ secret_env_vars }}"
+      when: psr_registered | bool
+
+# Create resources only if not using AAP integration or PSR is registered
+- name: Create resources
+  when: not aap_integration_enabled | bool or (aap_integration_enabled | bool and psr_registered | bool)
+  block:
+    # Create Deployment
+    - name: Create Deployment
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'deployment.yaml.j2') | from_yaml }}"
+
+    # Create Service
+    - name: Create Service
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'service.yaml.j2') | from_yaml }}"
+
+    # Create Route (if on OpenShift)
+    - name: Check if running on OpenShift
+      kubernetes.core.k8s_info:
+        api_version: route.openshift.io/v1
+        kind: Route
+      register: route_api
+      ignore_errors: true
+
+    - name: Create Route (if on OpenShift)
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'route.yaml.j2') | from_yaml }}"
+      when: route_api is succeeded
 
 # Update ExampleService status
 - name: Update ExampleService status with AAP integration
@@ -129,7 +215,7 @@
           reason: "ServiceDeployed"
           lastTransitionTime: "{{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
           message: "Service has been deployed and registered with the AAP Gateway"
-  when: aap_integration_enabled | bool
+  when: aap_integration_enabled | bool and (psr_registered | default(false) | bool)
 
 - name: Update ExampleService status without AAP integration
   operator_sdk.util.k8s_status:
